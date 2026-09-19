@@ -1,0 +1,17 @@
+
+# This repository releases itself with its own reusable workflow. It is not a Python
+# package, so there is no [project] version to write: it gets a tag and a release, which
+# is what a caller pins with.
+name: self release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag-prefix: "v"

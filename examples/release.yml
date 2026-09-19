@@ -1,0 +1,21 @@
+# Copy to .github/workflows/release.yml in the repository that publishes releases.
+#
+# `permissions` is granted here, by the caller: a reusable workflow cannot give itself
+# rights the calling job does not have.
+name: release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    uses: OWNER/newsbump/.github/workflows/release.yml@main
+    # Defaults shown; delete any line you do not need to change.
+    with:
+      news-dir: news
+      pyproject: pyproject.toml
+      tag-prefix: ""        # "v" for v1.2.3 tags
+      zero-major: minor     # "major" for strict semver below 1.0.0

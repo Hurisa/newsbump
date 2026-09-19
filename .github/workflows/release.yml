@@ -1,0 +1,129 @@
+
+name: release
+
+# Reusable: a repository calls this on every push to its default branch. It spends the
+# news fragments that arrived with the merge, writes the version they add up to into the
+# package file, tags it, and publishes a release whose notes are the fragments themselves.
+#
+# A push with no fragments does nothing at all, so this is safe to run on every push —
+# that is also what stops it reacting to its own release commit. (A push made with
+# GITHUB_TOKEN does not start another workflow run either, so there are two reasons.)
+
+on:
+  workflow_call:
+    inputs:
+      news-dir:
+        type: string
+        default: news
+      pyproject:
+        description: the file whose [project] version is rewritten; ignored when absent
+        type: string
+        default: pyproject.toml
+      tag-prefix:
+        description: 'set to "v" for v1.2.3 tags; empty means bare 1.2.3'
+        type: string
+        default: ""
+      zero-major:
+        description: >
+          what .major means before 1.0.0 — "minor" keeps 0.x (0.4.0 -> 0.5.0) so reaching
+          1.0.0 stays a person's decision; "major" is strict semver (0.4.0 -> 1.0.0)
+        type: string
+        default: minor
+      python-version:
+        type: string
+        default: "3.12"
+    outputs:
+      version:
+        description: the version released, empty when there was nothing to release
+        value: ${{ jobs.release.outputs.version }}
+
+# One release at a time. Two pushes landing together must not both compute "the next
+# version" from the same tag and race to claim it.
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # push the version commit, the tag, and the release
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      # Tags included: the next version is computed from the last one, because tags are
+      # the record of what was released and a version in a file is only a claim about it.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch the releaser
+        id: source
+        run: |
+          echo "repo=${GITHUB_WORKFLOW_REF%%/.github/*}" >> "$GITHUB_OUTPUT"
+          echo "ref=${GITHUB_WORKFLOW_REF##*@}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.source.outputs.repo }}
+          ref: ${{ steps.source.outputs.ref }}
+          path: .newsbump
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: What would this release?
+        id: plan
+        run: |
+          version=$(python .newsbump/scripts/newsbump.py \
+            --news-dir "${{ inputs.news-dir }}" \
+            plan --tag-prefix "${{ inputs.tag-prefix }}" --zero-major "${{ inputs.zero-major }}")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ -z "$version" ]; then
+            echo "No news fragments: nothing to release." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Releasing $version." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Refuse a tag that already exists
+        if: steps.plan.outputs.version != ''
+        run: |
+          tag="${{ inputs.tag-prefix }}${{ steps.plan.outputs.version }}"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::error::$tag already exists. A release was interrupted, or a tag was" \
+                 "moved by hand; resolve it before releasing again."
+            exit 1
+          fi
+
+      - name: Write the version, the notes, and spend the fragments
+        if: steps.plan.outputs.version != ''
+        run: |
+          python .newsbump/scripts/newsbump.py \
+            --news-dir "${{ inputs.news-dir }}" \
+            apply --version "${{ steps.plan.outputs.version }}" \
+                  --pyproject "${{ inputs.pyproject }}" \
+                  --notes-out "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit, tag, push
+        if: steps.plan.outputs.version != ''
+        env:
+          VERSION: ${{ steps.plan.outputs.version }}
+          TAG: ${{ inputs.tag-prefix }}${{ steps.plan.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Release $VERSION" -m "Release notes are on the tag."
+          # -F only: git refuses -m and -F together, and the notes are the message.
+          git tag -a "$TAG" -F "$RUNNER_TEMP/notes.md"
+          # The tag goes with the commit it points at, in one push: a tag that arrives
+          # without its commit is a release nobody can check out.
+          git push origin HEAD "refs/tags/$TAG"
+
+      - name: Publish the release
+        if: steps.plan.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag-prefix }}${{ steps.plan.outputs.version }}
+        run: gh release create "$TAG" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"

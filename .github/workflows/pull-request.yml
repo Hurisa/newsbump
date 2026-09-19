@@ -1,0 +1,13 @@
+
+# newsbump asks the same of itself that it asks of its callers: a pull request here adds
+# a fragment too. The local path is the version on this branch, so a change to the check
+# is tested by the pull request that makes it.
+name: pull request
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+jobs:
+  news:
+    uses: ./.github/workflows/news-check.yml

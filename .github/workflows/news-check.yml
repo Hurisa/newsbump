@@ -1,0 +1,73 @@
+
+name: news check
+
+# Reusable: a repository calls this from its own pull-request workflow. It fails when the
+# branch adds no news fragment, which is what makes a release note impossible to forget —
+# the note is written while the change is fresh, by the person who made it.
+#
+# Add the skip label to a pull request that genuinely releases nothing (a typo in a
+# comment, a CI tweak). The label is a deliberate act by a person, which is the point: an
+# automatic exemption becomes the default path.
+
+on:
+  workflow_call:
+    inputs:
+      news-dir:
+        description: the directory holding the fragments
+        type: string
+        default: news
+      skip-label:
+        description: a pull-request label that waives the check
+        type: string
+        default: skip-news
+      python-version:
+        type: string
+        default: "3.12"
+
+jobs:
+  news:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip when the pull request is labelled
+        id: waiver
+        run: |
+          if [ "${{ contains(github.event.pull_request.labels.*.name, inputs.skip-label) }}" = "true" ]; then
+            echo "waived=true" >> "$GITHUB_OUTPUT"
+            echo "Labelled ${{ inputs.skip-label }}: this pull request declares no release note."
+          fi
+
+      # Full history: the check compares this branch against where it left the base, so a
+      # shallow clone has nothing to compare with.
+      - uses: actions/checkout@v4
+        if: steps.waiver.outputs.waived != 'true'
+        with:
+          fetch-depth: 0
+
+      # The script lives in the repository this workflow came from, not in the caller.
+      # GITHUB_WORKFLOW_REF names both, so a rename or a pinned tag needs no edit here:
+      # it reads like owner/repo/.github/workflows/news-check.yml@refs/heads/main
+      - name: Fetch the checker
+        if: steps.waiver.outputs.waived != 'true'
+        id: source
+        run: |
+          echo "repo=${GITHUB_WORKFLOW_REF%%/.github/*}" >> "$GITHUB_OUTPUT"
+          echo "ref=${GITHUB_WORKFLOW_REF##*@}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: steps.waiver.outputs.waived != 'true'
+        with:
+          repository: ${{ steps.source.outputs.repo }}
+          ref: ${{ steps.source.outputs.ref }}
+          path: .newsbump
+
+      - uses: actions/setup-python@v5
+        if: steps.waiver.outputs.waived != 'true'
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Does this branch say what it changes?
+        if: steps.waiver.outputs.waived != 'true'
+        run: |
+          git fetch --no-tags --depth=0 origin "${{ github.base_ref }}"
+          python .newsbump/scripts/newsbump.py \
+            --news-dir "${{ inputs.news-dir }}" \
+            check --base-ref "origin/${{ github.base_ref }}"

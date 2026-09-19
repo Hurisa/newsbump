@@ -1,0 +1,13 @@
+# Copy to .github/workflows/pull-request.yml in the repository that needs the check.
+#
+# Pin @main while you are settling in; pin a tag once you are not. A workflow that can
+# change under you is a workflow that can fail a release at the worst moment.
+name: pull request
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+jobs:
+  news:
+    uses: OWNER/newsbump/.github/workflows/news-check.yml@main
