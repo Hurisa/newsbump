@@ -242,14 +242,31 @@ def test_editing_someone_elses_fragment_is_not_contributing_one(repo: Path) -> N
     assert newsbump.check("main", Path("news")), "modifying is not adding"
 
 
-def test_a_fragment_with_a_bad_extension_is_named(repo: Path) -> None:
+def test_a_likely_typo_is_named(repo: Path) -> None:
+    """`.patch` is nobody's idea of a README: when it is the only thing added, say so
+    rather than leaving someone to spot the extension by eye."""
     git(repo, "switch", "-qc", "feature")
     write(repo / "news", "oops.patch", "Fix a thing.")
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "work")
 
     problems = newsbump.check("main", Path("news"))
-    assert any("patch" in problem and "not a kind" in problem for problem in problems)
+    assert any("adds no news fragment" in problem for problem in problems)
+    assert any("oops.patch" in problem for problem in problems)
+
+
+def test_a_readme_beside_a_fragment_is_not_refused(repo: Path) -> None:
+    """The directory's own README is what this tool tells people to write, and a
+    .gitkeep is how the directory gets created. Refusing them refuses its own layout —
+    which is exactly what happened on the first repository to adopt it."""
+    git(repo, "switch", "-qc", "feature")
+    write(repo / "news", "README.md", "how to write a fragment")
+    write(repo / "news", ".gitkeep", "")
+    write(repo / "news", "adds-a-thing.minor", "Add a thing.")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "work")
+
+    assert newsbump.check("main", Path("news")) == []
 
 
 def test_an_empty_fragment_is_refused(repo: Path) -> None:
