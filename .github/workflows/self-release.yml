@@ -1,7 +1,7 @@
 
-# This repository releases itself with its own reusable workflow. It is not a Python
-# package, so there is no [project] version to write: it gets a tag and a release, which
-# is what a caller pins with.
+# This repository releases itself with its own action. It is not a Python package, so
+# there is no [project] version to write: it gets a tag and a release, which is what a
+# caller pins against.
 name: self release
 
 on:
@@ -10,6 +10,11 @@ on:
 
 jobs:
   release:
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    uses: ./.github/workflows/release.yml
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./actions/release

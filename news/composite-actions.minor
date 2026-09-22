@@ -1,0 +1,1 @@
+Ship the check and the release as actions, so a caller other than this repository can run them.
