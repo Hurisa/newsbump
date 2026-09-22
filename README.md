@@ -35,7 +35,11 @@ on:
     types: [opened, synchronize, reopened, labeled, unlabeled]
 jobs:
   news:
-    uses: OWNER/newsbump/.github/workflows/news-check.yml@main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: OWNER/newsbump/actions/news-check@0.2.0
 ```
 
 ```yaml
@@ -45,10 +49,17 @@ on:
     branches: [main]
 jobs:
   release:
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    uses: OWNER/newsbump/.github/workflows/release.yml@main
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: OWNER/newsbump/actions/release@0.2.0
 ```
+
+Pin a tag rather than `@main`: the pin covers the action *and* the script it runs, because
+GitHub checks the action's repository out at that ref.
 
 Then make the directory and let the first pull request add the first fragment:
 
@@ -90,6 +101,13 @@ adds three fragments and gets three bullets. The bump is the largest of them.
 **Editing an existing fragment is not contributing one.** The check asks what the branch
 *added* since it left the base branch, so an unreleased fragment someone else wrote does
 not count for you, and a base branch that moved on does not count against you.
+
+**Actions, not reusable workflows.** A reusable workflow cannot find the repository it
+came from — `GITHUB_WORKFLOW_REF` names the *caller's* entry workflow, so a workflow that
+checks itself out fetches the caller instead. That is invisible when the caller and the
+tool are the same repository, which is exactly how it was first tested. An action is
+checked out by GitHub at the pinned ref, so it can simply read its own directory, and
+nothing is fetched into your workspace.
 
 **It does not run your tests.** This publishes what merged; whether what merged is good is
 a separate workflow's job, and keeping them apart means a flaky test suite cannot leave

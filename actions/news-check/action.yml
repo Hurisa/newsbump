@@ -1,0 +1,48 @@
+name: news check
+description: Fail a pull request that does not say what it changes.
+
+# A composite action, not a reusable workflow. A reusable workflow cannot find the
+# repository it came from: GITHUB_WORKFLOW_REF names the caller's entry workflow, so a
+# workflow that tries to check itself out fetches the caller instead. An action is checked
+# out by GitHub at the ref the caller pinned, and GITHUB_ACTION_PATH points at it — so one
+# pin covers this file and the script it runs, and nothing is fetched into your workspace.
+#
+# The caller checks its own repository out first, with fetch-depth: 0.
+
+inputs:
+  news-dir:
+    description: the directory holding the fragments
+    default: news
+  skip-label:
+    description: a pull-request label that waives the check
+    default: skip-news
+  python-version:
+    default: "3.12"
+
+runs:
+  using: composite
+  steps:
+    - name: Skip when the pull request is labelled
+      id: waiver
+      shell: bash
+      run: |
+        if [ "${{ contains(github.event.pull_request.labels.*.name, inputs.skip-label) }}" = "true" ]; then
+          echo "waived=true" >> "$GITHUB_OUTPUT"
+          echo "Labelled ${{ inputs.skip-label }}: this pull request declares no release note."
+        fi
+
+    - uses: actions/setup-python@v5
+      if: steps.waiver.outputs.waived != 'true'
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Does this branch say what it changes?
+      if: steps.waiver.outputs.waived != 'true'
+      shell: bash
+      run: |
+        # No --depth: the caller's checkout is full, and git refuses --depth=0 outright
+        # ("not a positive number") rather than reading it as "no limit".
+        git fetch --no-tags origin "${{ github.base_ref }}"
+        python "$GITHUB_ACTION_PATH/../../scripts/newsbump.py" \
+          --news-dir "${{ inputs.news-dir }}" \
+          check --base-ref "origin/${{ github.base_ref }}"

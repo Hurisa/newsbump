@@ -1,7 +1,6 @@
 
-# newsbump asks the same of itself that it asks of its callers: a pull request here adds
-# a fragment too. The local path is the version on this branch, so a change to the check
-# is tested by the pull request that makes it.
+# newsbump asks the same of itself that it asks of its callers. The local path is the
+# version on this branch, so a change to the check is tested by the pull request making it.
 name: pull request
 
 on:
@@ -10,4 +9,9 @@ on:
 
 jobs:
   news:
-    uses: ./.github/workflows/news-check.yml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./actions/news-check

@@ -1,7 +1,4 @@
 # Copy to .github/workflows/release.yml in the repository that publishes releases.
-#
-# `permissions` is granted here, by the caller: a reusable workflow cannot give itself
-# rights the calling job does not have.
 name: release
 
 on:
@@ -10,12 +7,18 @@ on:
 
 jobs:
   release:
+    runs-on: ubuntu-latest
     permissions:
-      contents: write
-    uses: OWNER/newsbump/.github/workflows/release.yml@main
-    # Defaults shown; delete any line you do not need to change.
-    with:
-      news-dir: news
-      pyproject: pyproject.toml
-      tag-prefix: ""        # "v" for v1.2.3 tags
-      zero-major: minor     # "major" for strict semver below 1.0.0
+      contents: write          # push the version commit, the tag, and the release
+    steps:
+      # fetch-depth: 0 — the next version is computed from the last tag.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: OWNER/newsbump/actions/release@0.2.0
+        # Defaults shown; delete any line you do not need to change.
+        with:
+          news-dir: news
+          pyproject: pyproject.toml
+          tag-prefix: ""        # "v" for v1.2.3 tags
+          zero-major: minor     # "major" for strict semver below 1.0.0

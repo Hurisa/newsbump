@@ -1,0 +1,105 @@
+name: release
+description: Spend the news fragments, set the version, tag it, publish the notes.
+
+# See actions/news-check/action.yml for why this is an action rather than a reusable
+# workflow. The caller checks its own repository out first, with fetch-depth: 0 so the
+# tags are present, and grants its job `permissions: contents: write`.
+#
+# A push with no fragments does nothing at all, so this is safe on every push — which is
+# also what stops it reacting to its own release commit.
+
+inputs:
+  news-dir:
+    default: news
+  pyproject:
+    description: the file whose [project] version is rewritten; ignored when absent
+    default: pyproject.toml
+  tag-prefix:
+    description: 'set to "v" for v1.2.3 tags; empty means bare 1.2.3'
+    default: ""
+  zero-major:
+    description: >
+      what .major means before 1.0.0 — "minor" keeps 0.x (0.4.0 -> 0.5.0) so reaching
+      1.0.0 stays a person's decision; "major" is strict semver (0.4.0 -> 1.0.0)
+    default: minor
+  python-version:
+    default: "3.12"
+
+outputs:
+  version:
+    description: the version released, empty when there was nothing to release
+    value: ${{ steps.plan.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: What would this release?
+      id: plan
+      shell: bash
+      run: |
+        version=$(python "$GITHUB_ACTION_PATH/../../scripts/newsbump.py" \
+          --news-dir "${{ inputs.news-dir }}" \
+          plan --tag-prefix "${{ inputs.tag-prefix }}" --zero-major "${{ inputs.zero-major }}")
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        if [ -z "$version" ]; then
+          echo "No news fragments: nothing to release." >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "Releasing $version." >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+    - name: Refuse a tag that already exists
+      if: steps.plan.outputs.version != ''
+      shell: bash
+      run: |
+        tag="${{ inputs.tag-prefix }}${{ steps.plan.outputs.version }}"
+        if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+          echo "::error::$tag already exists. A release was interrupted, or a tag was" \
+               "moved by hand; resolve it before releasing again."
+          exit 1
+        fi
+
+    - name: Write the version, the notes, and spend the fragments
+      if: steps.plan.outputs.version != ''
+      shell: bash
+      run: |
+        python "$GITHUB_ACTION_PATH/../../scripts/newsbump.py" \
+          --news-dir "${{ inputs.news-dir }}" \
+          apply --version "${{ steps.plan.outputs.version }}" \
+                --pyproject "${{ inputs.pyproject }}" \
+                --notes-out "$RUNNER_TEMP/notes.md"
+        cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Commit, tag, push
+      if: steps.plan.outputs.version != ''
+      shell: bash
+      env:
+        VERSION: ${{ steps.plan.outputs.version }}
+        TAG: ${{ inputs.tag-prefix }}${{ steps.plan.outputs.version }}
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        # Name the paths: the version file only when it exists, so a repository that is
+        # not a package still releases, and git refuses a pathspec matching nothing.
+        paths="${{ inputs.news-dir }}"
+        if [ -f "${{ inputs.pyproject }}" ]; then
+          paths="$paths ${{ inputs.pyproject }}"
+        fi
+        git add -A -- $paths
+        git commit -m "Release $VERSION" -m "Release notes are on the tag."
+        # -F only: git refuses -m and -F together, and the notes are the message.
+        git tag -a "$TAG" -F "$RUNNER_TEMP/notes.md"
+        # The tag goes with the commit it points at, in one push: a tag that arrives
+        # without its commit is a release nobody can check out.
+        git push origin HEAD "refs/tags/$TAG"
+
+    - name: Publish the release
+      if: steps.plan.outputs.version != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ inputs.tag-prefix }}${{ steps.plan.outputs.version }}
+      run: gh release create "$TAG" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
