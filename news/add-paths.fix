@@ -1,0 +1,1 @@
+Name the version file in the release commit only when it exists, so a repository that is not a package can still release.
