@@ -67,7 +67,10 @@ jobs:
       - name: Does this branch say what it changes?
         if: steps.waiver.outputs.waived != 'true'
         run: |
-          git fetch --no-tags --depth=0 origin "${{ github.base_ref }}"
+          # No --depth: the checkout above is already full, and git refuses
+          # --depth=0 outright ("not a positive number") rather than reading it
+          # as "no limit".
+          git fetch --no-tags origin "${{ github.base_ref }}"
           python .newsbump/scripts/newsbump.py \
             --news-dir "${{ inputs.news-dir }}" \
             check --base-ref "origin/${{ github.base_ref }}"

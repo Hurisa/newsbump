@@ -1,0 +1,1 @@
+Fetch the base branch without --depth=0, which git refuses.
