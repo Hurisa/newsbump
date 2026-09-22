@@ -63,7 +63,7 @@ echo "What this changes, in one line." > news/short-summary.minor
 |---|---|---|
 | `news-dir` | `news` | where fragments live |
 | `pyproject` | `pyproject.toml` | the file whose `[project] version` is rewritten |
-| `tag-prefix` | `""` | `v` gives `v1.2.3` tags; empty gives `1.2.3` |
+| `tag-prefix` | `""` | bare `1.2.3` tags; set `v` for `v1.2.3` |
 | `zero-major` | `minor` | what `.major` means below 1.0.0 (see below) |
 | `skip-label` | `skip-news` | a pull-request label that waives the check |
 | `python-version` | `3.12` | the runner's Python |
