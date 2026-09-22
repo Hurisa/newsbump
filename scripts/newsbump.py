@@ -192,26 +192,31 @@ def added_files(base_ref: str, news_dir: Path) -> list[Path]:
 def check(base_ref: str, news_dir: Path) -> list[str]:
     """Problems with this branch's news, as messages. Empty means it is fine."""
     added = added_files(base_ref, news_dir)
-    if not added:
-        return [
+    fragments = [path for path in added if path.suffix.lstrip(".") in KINDS]
+
+    if not fragments:
+        problems = [
             f"this branch adds no news fragment under {news_dir}/.",
             "Add one file per change, named <summary>.<kind> where <kind> is "
             + ", ".join(KINDS) + ".",
             f'For example: echo "What this changes, in one line." > '
             f"{news_dir}/short-summary.minor",
         ]
+        # A file added there that is not a fragment is a likely typo when it is the only
+        # thing added — say so, rather than leaving someone to spot `.patch` by eye.
+        for path in added:
+            problems.append(f"({path} is not a fragment: {path.suffix or 'no extension'})")
+        return problems
 
-    problems = []
-    for path in added:
-        kind = path.suffix.lstrip(".")
-        if kind not in KINDS:
-            problems.append(
-                f"{path}: {kind or 'no extension'!r} is not a kind; use "
-                + ", ".join(f".{k}" for k in KINDS)
-            )
-        elif not path.is_file() or not path.read_text().strip():
-            problems.append(f"{path}: empty. The text is the release note, so write one line.")
-    return problems
+    # Anything else added alongside them is not claiming to be a fragment: a README
+    # explaining the convention, a .gitkeep holding the directory. `read_fragments`
+    # ignores those, and so does this — refusing them would refuse this tool's own
+    # documented layout.
+    return [
+        f"{path}: empty. The text is the release note, so write one line."
+        for path in fragments
+        if not path.is_file() or not path.read_text().strip()
+    ]
 
 
 def main(argv: list[str] | None = None) -> int:
