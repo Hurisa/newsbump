@@ -113,10 +113,17 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Only what the release changed. `git add -A` would also commit this
-          # workflow's own checkout of the tool, which sits in the caller's
-          # workspace because that is the only place a checkout may go.
-          git add -A -- "${{ inputs.pyproject }}" "${{ inputs.news-dir }}"
+          # Only what the release changed. `git add -A` on its own would also
+          # commit this workflow's checkout of the tool, which sits in the
+          # caller's workspace because that is the only place a checkout may go.
+          # The version file is named only when it exists: a repository that is
+          # not a package still gets a tag and a release, and git refuses a
+          # pathspec that matches nothing.
+          paths="${{ inputs.news-dir }}"
+          if [ -f "${{ inputs.pyproject }}" ]; then
+            paths="$paths ${{ inputs.pyproject }}"
+          fi
+          git add -A -- $paths
           git commit -m "Release $VERSION" -m "Release notes are on the tag."
           # -F only: git refuses -m and -F together, and the notes are the message.
           git tag -a "$TAG" -F "$RUNNER_TEMP/notes.md"
