@@ -1,0 +1,1 @@
+Push the release commit and its tag atomically, so a run that loses the race to main leaves no tag behind.

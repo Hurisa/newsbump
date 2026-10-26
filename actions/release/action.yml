@@ -93,8 +93,11 @@ runs:
         # -F only: git refuses -m and -F together, and the notes are the message.
         git tag -a "$TAG" -F "$RUNNER_TEMP/notes.md"
         # The tag goes with the commit it points at, in one push: a tag that arrives
-        # without its commit is a release nobody can check out.
-        git push origin HEAD "refs/tags/$TAG"
+        # without its commit is a release nobody can check out. --atomic is what makes
+        # "one push" true. Without it git updates each ref on its own, so when the branch
+        # has moved since checkout the commit is rejected and the tag still lands — a
+        # release on a commit that is on no branch. Seen when one merge triggered two runs.
+        git push --atomic origin HEAD "refs/tags/$TAG"
 
     - name: Publish the release
       if: steps.plan.outputs.version != ''
